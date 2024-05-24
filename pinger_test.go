@@ -18,9 +18,19 @@ import (
 )
 
 func TestPinger(t *testing.T) {
-	p := pinger.New("127.0.0.1")
+	t.Run("IPv4", func(t *testing.T) {
+		p := pinger.New("127.0.0.1")
 
-	ctx := context.Background()
-	err := p.Ping(ctx, "ip")
-	require.NoError(t, err)
+		ctx := context.Background()
+		err := p.Ping(ctx, "ip4")
+		require.NoError(t, err)
+	})
+
+	t.Run("IPv6", func(t *testing.T) {
+		p := pinger.New("::1")
+
+		ctx := context.Background()
+		err := p.Ping(ctx, "ip6")
+		require.NoError(t, err)
+	})
 }
