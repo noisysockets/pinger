@@ -11,7 +11,6 @@ package pinger
 
 import (
 	"context"
-	"fmt"
 	"os/exec"
 	"runtime"
 	"strconv"
@@ -75,9 +74,9 @@ func (p *Pinger) Ping(ctx context.Context, network string) error {
 	}
 
 	cmd := exec.CommandContext(ctx, "ping", append(args, p.host)...)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		// todo: parse the output to get more information
-		return fmt.Errorf("ping failed: %w, output: %s", err, string(out))
+	if _, err := cmd.CombinedOutput(); err != nil {
+		// TODO: parse the command output to get more information.
+		return err
 	}
 
 	return nil

@@ -18,7 +18,7 @@ import (
 )
 
 func TestPinger(t *testing.T) {
-	p := pinger.New("8.8.8.8")
+	p := pinger.New("127.0.0.1")
 
 	ctx := context.Background()
 	err := p.Ping(ctx, "ip")
