@@ -13,43 +13,25 @@ import (
 	"context"
 	"os/exec"
 	"runtime"
-	"strconv"
 	"time"
 )
 
 // Pinger is a simple wrapper around the ping command.
-type Pinger struct {
-	host    string
-	timeout time.Duration
-}
-
-type Option func(*Pinger)
-
-// WithTimeout sets the timeout to wait for a ping response.
-func WithTimeout(timeout time.Duration) Option {
-	return func(p *Pinger) {
-		p.timeout = timeout
-	}
-}
+type Pinger struct{}
 
 // New creates a new Pinger.
-func New(host string, opts ...Option) *Pinger {
-	p := &Pinger{
-		host:    host,
-		timeout: 5 * time.Second,
-	}
-
-	for _, opt := range opts {
-		opt(p)
-	}
-
-	return p
+func New() *Pinger {
+	return &Pinger{}
 }
 
 // Ping sends a single ICMP echo request to the target host.
 // Network is used to specify the IP version to use, valid values
 // are "ip", "ip4" and "ip6".
-func (p *Pinger) Ping(ctx context.Context, network string) error {
+func (p *Pinger) Ping(ctx context.Context, network, host string) error {
+	// Don't hang forever.
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
 	var args []string
 	if runtime.GOOS == "windows" {
 		if network == "ip4" {
@@ -58,9 +40,7 @@ func (p *Pinger) Ping(ctx context.Context, network string) error {
 			args = append(args, "/6")
 		}
 
-		args = append(args,
-			"/n", "1",
-			"/w", strconv.Itoa(int(p.timeout.Milliseconds())))
+		args = append(args, "/n", "1")
 	} else {
 		if network == "ip4" {
 			args = append(args, "-4")
@@ -68,12 +48,10 @@ func (p *Pinger) Ping(ctx context.Context, network string) error {
 			args = append(args, "-6")
 		}
 
-		args = append(args,
-			"-c", "1",
-			"-W", strconv.Itoa(int(p.timeout.Seconds())))
+		args = append(args, "-c", "1")
 	}
 
-	cmd := exec.CommandContext(ctx, "ping", append(args, p.host)...)
+	cmd := exec.CommandContext(ctx, "ping", append(args, host)...)
 	if _, err := cmd.CombinedOutput(); err != nil {
 		// TODO: parse the command output to get more information.
 		return err
