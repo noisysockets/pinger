@@ -234,13 +234,8 @@ func (p *Pinger) pingWithConn(ctx context.Context, logger *slog.Logger, pc net.P
 		ipHeaderLen = ipv6.HeaderLen
 	}
 
-	// Workaround for https://github.com/golang/go/issues/47369.
-	offset := 0
-	if _, ok := pc.(*icmp.PacketConn); ok && (runtime.GOOS == "darwin" || runtime.GOOS == "ios") {
-		offset = ipHeaderLen
-	}
-
 	// Some platforms need a buffer big enough to include the IP headers.
+	// Eg. https://github.com/golang/go/issues/47369.
 	replyBytes := make([]byte, len(reqBytes)+ipHeaderLen)
 	for {
 		select {
@@ -267,7 +262,7 @@ func (p *Pinger) pingWithConn(ctx context.Context, logger *slog.Logger, pc net.P
 
 		logger.Debug("Received ICMP message")
 
-		reply, err := icmp.ParseMessage(typ.Protocol(), replyBytes[offset:n])
+		reply, err := icmp.ParseMessage(typ.Protocol(), replyBytes[:n])
 		if err != nil {
 			return fmt.Errorf("failed to parse ICMP echo reply: %w", err)
 		}
@@ -301,8 +296,11 @@ func (p *Pinger) pingWithCommand(ctx context.Context, logger *slog.Logger, netwo
 	}
 	defer p.childProcessCounter.Release(1)
 
+	name := "ping"
 	var args []string
-	if runtime.GOOS == "windows" {
+
+	switch runtime.GOOS {
+	case "windows":
 		if network == "ip4" {
 			args = append(args, "/4")
 		} else if network == "ip6" {
@@ -310,19 +308,17 @@ func (p *Pinger) pingWithCommand(ctx context.Context, logger *slog.Logger, netwo
 		}
 
 		args = append(args, "/n", "1")
-	} else {
-		if network == "ip4" {
-			args = append(args, "-4")
-		} else if network == "ip6" {
-			args = append(args, "-6")
+	default:
+		if network == "ip6" {
+			name = "ping6"
 		}
 
 		args = append(args, "-c", "1")
 	}
 
-	logger.Debug("Executing ping command")
+	logger.Debug("Executing ping command", slog.String("name", name))
 
-	cmd := exec.CommandContext(ctx, "ping", append(args, host)...)
+	cmd := exec.CommandContext(ctx, name, append(args, host)...)
 	if _, err := cmd.CombinedOutput(); err != nil {
 		// TODO: parse the command output to get more information.
 		return err
