@@ -30,7 +30,7 @@ func TestPinger(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		err := p.Ping(ctx, "ip", "google.com")
+		err := p.Ping(ctx, "ip", "localhost")
 		require.NoError(t, err)
 	})
 
