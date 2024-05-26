@@ -2,5 +2,10 @@
 
 A cross platform unprivileged Ping (ICMP Echo) library for Go.
 
-This is achieved by shelling out to the systems `ping` command. Yes this is a
-little bit horrendous but it works everywhere.
+## Supported Platforms
+
+* Linux
+* MacOS
+* Windows
+
+And other platforms with the `ping` command available.

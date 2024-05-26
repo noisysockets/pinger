@@ -12,24 +12,40 @@ package pinger_test
 import (
 	"context"
 	"testing"
+	"time"
 
+	"github.com/neilotoole/slogt"
 	"github.com/noisysockets/pinger"
 	"github.com/stretchr/testify/require"
 )
 
 func TestPinger(t *testing.T) {
-	t.Run("IPv4", func(t *testing.T) {
-		p := pinger.New()
+	logger := slogt.New(t)
 
-		ctx := context.Background()
+	p := pinger.New(
+		pinger.WithLogger(logger),
+	)
+
+	t.Run("IP", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		err := p.Ping(ctx, "ip", "google.com")
+		require.NoError(t, err)
+	})
+
+	t.Run("IPv4", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
 		err := p.Ping(ctx, "ip4", "127.0.0.1")
 		require.NoError(t, err)
 	})
 
 	t.Run("IPv6", func(t *testing.T) {
-		p := pinger.New()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
 
-		ctx := context.Background()
 		err := p.Ping(ctx, "ip6", "::1")
 		require.NoError(t, err)
 	})
