@@ -74,6 +74,16 @@ func WithResolver(r resolver.Resolver) Option {
 	}
 }
 
+// PacketConnFactory is a factory function for creating ICMP PacketConns.
+type PacketConnFactory func(ctx context.Context, network, host string) (net.PacketConn, error)
+
+// WithPacketConnFactory allows the use of a custom PacketConnFactory.
+func WithPacketConnFactory(factory PacketConnFactory) Option {
+	return func(p *Pinger) {
+		p.packetConnFactory = factory
+	}
+}
+
 // WithMaxChildProcesses sets the maximum number of ping commands that can be
 // run concurrently. This helps avoid an easy DoS target.
 func WithMaxChildProcesses(n int) Option {
@@ -82,19 +92,12 @@ func WithMaxChildProcesses(n int) Option {
 	}
 }
 
-// WithPacketConn provides a PacketConn to use for sending and receiving ICMP messages.
-func WithPacketConn(pc net.PacketConn) Option {
-	return func(p *Pinger) {
-		p.pc = pc
-	}
-}
-
 // Pinger sends ICMP echo requests to hosts.
 type Pinger struct {
 	logger              *slog.Logger
 	resolver            resolver.Resolver
+	packetConnFactory   PacketConnFactory
 	childProcessCounter semaphore.Weighted
-	pc                  net.PacketConn
 	id                  int
 	seq                 atomic.Uint32
 }
@@ -104,6 +107,7 @@ func New(opts ...Option) *Pinger {
 	p := &Pinger{
 		logger:              slog.Default(),
 		resolver:            net.DefaultResolver,
+		packetConnFactory:   defaultPacketConnFactory,
 		childProcessCounter: *semaphore.NewWeighted(32),
 		id:                  rand.Intn(math.MaxUint16),
 	}
@@ -119,35 +123,16 @@ func New(opts ...Option) *Pinger {
 func (p *Pinger) Ping(ctx context.Context, network, host string) error {
 	logger := p.logger.With(slog.String("network", network), slog.String("host", host))
 
-	pc := p.pc
-	if pc == nil {
-		pcNetwork := "udp4"
-		bindAddr := netip.IPv4Unspecified()
-		if network == "ip6" {
-			pcNetwork = "udp6"
-			bindAddr = netip.IPv6Unspecified()
+	// Attempt to create an unprivileged ICMP PacketConn.
+	pc, err := p.packetConnFactory(ctx, network, host)
+	if err != nil {
+		if !errors.Is(err, os.ErrPermission) {
+			logger.Debug("Failed to create unprivileged ICMP PacketConn", slog.Any("error", err))
 		}
 
-		// Workaround for: https://github.com/prometheus-community/pro-bing/tree/main?tab=readme-ov-file#windows
-		if runtime.GOOS == "windows" {
-			pcNetwork = "ip4:icmp"
-			if network == "ip6" {
-				pcNetwork = "ip6:ipv6-icmp"
-			}
-		}
-
-		// Attempt to create an unprivileged ICMP PacketConn.
-		var err error
-		pc, err = icmp.ListenPacket(pcNetwork, bindAddr.String())
-		if err != nil {
-			if !errors.Is(err, os.ErrPermission) {
-				logger.Debug("Failed to create unprivileged ICMP PacketConn", slog.Any("error", err))
-			}
-
-			pc = nil
-		} else {
-			defer pc.Close()
-		}
+		pc = nil
+	} else {
+		defer pc.Close()
 	}
 
 	if pc != nil {
@@ -325,4 +310,24 @@ func (p *Pinger) pingWithCommand(ctx context.Context, logger *slog.Logger, netwo
 	}
 
 	return nil
+}
+
+func defaultPacketConnFactory(ctx context.Context, network, host string) (net.PacketConn, error) {
+	pcNetwork := "udp4"
+	bindAddr := netip.IPv4Unspecified()
+	if network == "ip6" {
+		pcNetwork = "udp6"
+		bindAddr = netip.IPv6Unspecified()
+	}
+
+	// Workaround for: https://github.com/prometheus-community/pro-bing/tree/main?tab=readme-ov-file#windows
+	if runtime.GOOS == "windows" {
+		pcNetwork = "ip4:icmp"
+		if network == "ip6" {
+			pcNetwork = "ip6:ipv6-icmp"
+		}
+	}
+
+	// Attempt to create an unprivileged ICMP PacketConn.
+	return icmp.ListenPacket(pcNetwork, bindAddr.String())
 }
