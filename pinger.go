@@ -75,7 +75,7 @@ func WithResolver(r resolver.Resolver) Option {
 }
 
 // PacketConnFactory is a factory function for creating ICMP PacketConns.
-type PacketConnFactory func(ctx context.Context, network, host string) (net.PacketConn, error)
+type PacketConnFactory func(ctx context.Context, network string) (net.PacketConn, error)
 
 // WithPacketConnFactory allows the use of a custom PacketConnFactory.
 func WithPacketConnFactory(factory PacketConnFactory) Option {
@@ -124,7 +124,7 @@ func (p *Pinger) Ping(ctx context.Context, network, host string) error {
 	logger := p.logger.With(slog.String("network", network), slog.String("host", host))
 
 	// Attempt to create an unprivileged ICMP PacketConn.
-	pc, err := p.packetConnFactory(ctx, network, host)
+	pc, err := p.packetConnFactory(ctx, network)
 	if err != nil {
 		if !errors.Is(err, os.ErrPermission) {
 			logger.Debug("Failed to create unprivileged ICMP PacketConn", slog.Any("error", err))
@@ -312,7 +312,7 @@ func (p *Pinger) pingWithCommand(ctx context.Context, logger *slog.Logger, netwo
 	return nil
 }
 
-func defaultPacketConnFactory(ctx context.Context, network, host string) (net.PacketConn, error) {
+func defaultPacketConnFactory(ctx context.Context, network string) (net.PacketConn, error) {
 	pcNetwork := "udp4"
 	bindAddr := netip.IPv4Unspecified()
 	if network == "ip6" {
